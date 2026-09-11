@@ -5,7 +5,7 @@
  */
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ResolvedApp, Result } from '../core/types.js';
+import type { ResolvedApp, Result, RpaFollowup } from '../core/types.js';
 import { launch, type RpaOptions } from './driver.js';
 import { fillDeclarations } from './declarations.js';
 import { fillStoreSettings, submitForReview } from './store.js';
@@ -45,12 +45,13 @@ export async function runRpa(input: RunRpaInput): Promise<Result> {
   const phase = input.phase ?? 'all';
   const data: Record<string, unknown> = { dryRun: !!input.dryRun };
   const manualSteps: string[] = [];
+  const followups: RpaFollowup[] = [];
   const d = await launch(opts);
   try {
     if (phase === 'declarations' || phase === 'all') {
       const r = await fillDeclarations(d, input.developerId, rpa);
       data.declarations = r;
-      for (const s of r.skipped) manualSteps.push(`declaração pendente: ${s}`);
+      followups.push(...r.followups);
       if (r.pendingAfter > 0) manualSteps.push(`ainda ${r.pendingAfter} declaração(ões) requerem atenção.`);
     }
     if (phase === 'store' || phase === 'all') {
@@ -61,9 +62,15 @@ export async function runRpa(input: RunRpaInput): Promise<Result> {
       data.submitted = n;
       if (n === 0) manualSteps.push('nada pendente pra enviar (ou botão não encontrado) — confira a Vista geral da publicação.');
     }
-    return { ok: true, command, data, manualSteps: manualSteps.length ? manualSteps : undefined };
+    return {
+      ok: true,
+      command,
+      data,
+      manualSteps: manualSteps.length ? manualSteps : undefined,
+      followups: followups.length ? followups : undefined,
+    };
   } catch (e) {
-    return { ok: false, command, error: (e as Error).message, data };
+    return { ok: false, command, error: (e as Error).message, data, followups: followups.length ? followups : undefined };
   } finally {
     await d.close();
   }

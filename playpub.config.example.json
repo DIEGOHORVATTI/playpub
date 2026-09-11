@@ -44,6 +44,12 @@
         },
         "targetAges": ["18+"],
         "category": "Entretenimento",
+        "iarc": {
+          "email": "contato@exemplo.com",
+          "category": "Todos os outros tipos de apps",
+          "inAppPurchases": true,
+          "yes": []
+        },
         "dataSafety": {
           "encryptedInTransit": true,
           "accountCreation": ["Nome de utilizador e palavra-passe"],

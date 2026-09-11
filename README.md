@@ -11,7 +11,7 @@ A publicação no Play **não é** uma coisa só — ela se divide em 3 camadas,
 | Camada | O quê | Como o playpub resolve |
 |---|---|---|
 | **1. API** | Enviar AAB/APK, faixas, testadores, países, ficha da loja (texto + ícone + feature + screenshots), lançamentos | `playpub publish` — Google Play Developer API (`androidpublisher`). **Funciona de verdade.** |
-| **2. Só-console (RPA)** | Declarações de "Conteúdo da app" (privacidade, anúncios, segurança de dados, público-alvo, app access…), categoria/contato e envio pra revisão | `playpub rpa` — Playwright dirigindo o navegador logado. **Funciona** (menos IARC, que é específico do app). |
+| **2. Só-console (RPA)** | Declarações de "Conteúdo da app" (privacidade, anúncios, IARC, segurança de dados, público-alvo, app access…), categoria/contato e envio pra revisão | `playpub rpa` — Playwright dirigindo o navegador logado. O que não fechar vira `followups` pra um browser MCP. |
 | **3. Manual (one-time)** | Criar a **service account** no Google Cloud + **convidá-la** no Play Console | `playpub setup:sa` faz o Cloud e o secret; o convite no Play é o único clique manual (o Google não tem API pra isso). |
 
 ## Instalação
@@ -84,9 +84,19 @@ playpub rpa --app unitv --phase submit   # "Enviar N alterações para revisão"
 playpub rpa --app unitv --dry-run        # navega e valida, sem clicar Guardar/Enviar
 ```
 
-Config: preencha `developerId` (topo) e, por app, `rpa.consoleAppId` + as respostas (veja o bloco `rpa` em [`playpub.config.example.json`](./playpub.config.example.json)). O login é reaproveitado via `--user-data-dir` (default: um dir no tmp).
+Config: preencha `developerId` (topo) e, por app, `rpa.consoleAppId` + as respostas (veja o bloco `rpa` em [`playpub.config.example.json`](./playpub.config.example.json)). O login é reaproveitado via `--user-data-dir` (default: um dir no tmp). Inclui a **Classificação de conteúdo (IARC)**: preencha `rpa.iarc` (email, categoria, `inAppPurchases`, e `yes[]` pra perguntas que devem ser "Sim"); o resto vai "Não".
 
-**Limites conhecidos:** a **Classificação de conteúdo (IARC)** é um questionário específico por app — preencha 1x na mão (some da lista depois). O `--dry-run` é seu amigo pra conferir a navegação antes de deixar salvar.
+### Fallback: "CLI → IA no navegador" (browser MCP)
+
+O RPA determinístico cobre o caminho comum, mas formulários mudam. O que ele **não** conseguir fechar volta em `followups` — uma lista de `{ step, url, hint, values }`. A ideia é ser 100% CLI e, no que falhar, deixar um **agente de browser MCP** (ex.: `claude-in-chrome`) terminar: abra a `url`, siga o `hint`, use os `values`. Na CLI aparece assim:
+
+```
+✗ rpa:all unitv
+  ↳ browser-MCP [classificação-iarc]: Abra "Classificação de conteúdo" → Iniciar questionário: email…
+      https://play.google.com/console/u/0/developers/<dev>/app/<app>/app-content/overview
+```
+
+Via MCP (`playpub_rpa`), esses `followups` vêm no JSON — a IA que orquestra pega cada um e executa no seu próprio browser MCP. Dica: rode com `--dry-run` primeiro pra ver a navegação antes de deixar salvar.
 
 
 ## Uso por IA (MCP)
@@ -125,8 +135,8 @@ Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_AL
 
 ## Roadmap
 
-- [x] `rpa` completo (Playwright) — declarações + loja + envio pra revisão
-- [ ] Classificação de conteúdo (IARC) automatizada por perfil de app
+- [x] `rpa` completo (Playwright) — declarações (incl. IARC) + loja + envio pra revisão
+- [x] Fallback `followups` pra browser MCP no que o RPA não fecha
 - [ ] Import/Export CSV da Segurança de dados
 - [ ] `create-app` (criação do 1º app via RPA)
 - [ ] `promote` (mover de faixa) e `rollout` (percentual)

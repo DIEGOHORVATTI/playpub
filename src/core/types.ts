@@ -55,6 +55,18 @@ export interface RpaConfig {
   targetAges?: Array<'5-' | '6-8' | '9-12' | '13-15' | '16-17' | '18+'>;
   /** Categoria da loja. Ex.: "Entretenimento". */
   category?: string;
+  /** Classificação de conteúdo (IARC). */
+  iarc?: {
+    /** Email de contato do questionário IARC. */
+    email: string;
+    /** Rótulo da categoria da app no IARC. Ex.: "Todos os outros tipos de apps". */
+    category: string;
+    /** App tem compras digitais/in-app? (recarga = true) */
+    inAppPurchases?: boolean;
+    /** Por default TODAS as perguntas de conteúdo = "Não". Aqui, regex de
+     *  perguntas (pelo texto) que devem ser respondidas "Sim". */
+    yes?: string[];
+  };
   /** Declaração de Segurança de dados. */
   dataSafety?: {
     /** Criptografado em trânsito? Default true. */
@@ -107,6 +119,22 @@ export interface ResolvedApp extends AppConfig {
   packageName: string;
 }
 
+/**
+ * Passo que o RPA determinístico NÃO conseguiu fechar sozinho — descrito de
+ * forma que um agente de **browser MCP** (ex.: claude-in-chrome) execute:
+ * abre `url`, segue `hint`, usando `values`. É a ponte "CLI → IA no navegador".
+ */
+export interface RpaFollowup {
+  /** Nome do passo. Ex.: "classificação-iarc". */
+  step: string;
+  /** Deep-link pra abrir no navegador logado. */
+  url: string;
+  /** Instrução clara do que fazer na página. */
+  hint: string;
+  /** Dados a preencher (email, categoria, respostas…). */
+  values?: Record<string, unknown>;
+}
+
 /** Resultado padrão de toda operação — serializável pra JSON/MCP. */
 export interface Result<T = unknown> {
   ok: boolean;
@@ -115,4 +143,6 @@ export interface Result<T = unknown> {
   error?: string;
   /** Passos manuais/RPA que o core NÃO consegue automatizar via API. */
   manualSteps?: string[];
+  /** Passos pra um agente de browser MCP terminar (fallback do RPA). */
+  followups?: RpaFollowup[];
 }

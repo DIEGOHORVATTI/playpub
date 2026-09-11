@@ -29,6 +29,7 @@ function emit(r: Result | Result[]): never {
       if (x.data) console.log('  ' + JSON.stringify(x.data));
       if (x.error) console.error('  erro: ' + x.error);
       for (const s of x.manualSteps ?? []) console.log('  manual: ' + s);
+      for (const f of x.followups ?? []) console.log(`  ↳ browser-MCP [${f.step}]: ${f.hint}\n      ${f.url}`);
     }
   }
   process.exit(ok ? 0 : 1);

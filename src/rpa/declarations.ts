@@ -14,12 +14,13 @@
  *   - Segurança de dados é um wizard de 5 passos; o passo "Utilização" abre um
  *     DIÁLOGO por tipo de dado (recolhido → não-efémero → necessária → finalidades).
  */
-import type { RpaConfig } from '../core/types.js';
+import type { RpaConfig, RpaFollowup } from '../core/types.js';
 import {
   Driver,
   clickButton,
   clickSave,
   checkBox,
+  consoleUrl,
   expandSections,
   fillText,
   gotoContentOverview,
@@ -27,6 +28,7 @@ import {
   pickRadio,
   pickRadioAfter,
 } from './driver.js';
+import { fillIarc } from './iarc.js';
 
 const SIM = /^\s*Sim/;
 const NAO = /^\s*Não/;
@@ -34,6 +36,8 @@ const NAO = /^\s*Não/;
 export interface DeclarationsResult {
   done: string[];
   skipped: string[];
+  /** Passos que o RPA não fechou — pra um agente de browser-MCP terminar. */
+  followups: RpaFollowup[];
   pendingAfter: number;
 }
 
@@ -46,19 +50,25 @@ export async function fillDeclarations(
   const app = rpa.consoleAppId;
   const done: string[] = [];
   const skipped: string[] = [];
+  const followups: RpaFollowup[] = [];
+  const overview = consoleUrl(dev, app, 'app-content/overview');
 
-  const step = async (label: string, fn: () => Promise<boolean>) => {
+  const step = async (label: string, hint: string, fn: () => Promise<boolean>) => {
     try {
       const ok = await fn();
-      (ok ? done : skipped).push(label);
+      if (ok) done.push(label);
+      else {
+        skipped.push(`${label} (não pendente/pulado)`);
+      }
     } catch (e) {
       skipped.push(`${label} (${(e as Error).message})`);
+      followups.push({ step: label, url: overview, hint, values: { rpa } });
     }
   };
 
   // 1) Política de privacidade — URL
   if (rpa.privacyPolicyUrl) {
-    await step('privacidade', async () => {
+    await step('privacidade', 'Abra "Política de privacidade" e cole a URL da política em rpa.privacyPolicyUrl; Guardar.', async () => {
       await gotoContentOverview(d, dev, app);
       if (!(await openDeclaration(d, /Política de privacidade/))) return false;
       await fillText(d.page.getByRole('textbox').first(), rpa.privacyPolicyUrl!);
@@ -68,7 +78,7 @@ export async function fillDeclarations(
   }
 
   // 2) Anúncios — sim/não
-  await step('anúncios', async () => {
+  await step('anúncios', 'Abra "Anúncios" e responda se a app contém anúncios (rpa.hasAds); Guardar.', async () => {
     await gotoContentOverview(d, dev, app);
     if (!(await openDeclaration(d, /^Anúncios/))) return false;
     await pickRadio(d.page, rpa.hasAds ? SIM : NAO);
@@ -77,7 +87,7 @@ export async function fillDeclarations(
   });
 
   // 3) Detalhes de início de sessão (app access)
-  await step('app-access', async () => {
+  await step('app-access', 'Abra "Detalhes de início de sessão": app restrito → Sim, adicione as credenciais de teste (rpa.testCredentials), marque acesso total, Adicionar, Guardar.', async () => {
     await gotoContentOverview(d, dev, app);
     if (!(await openDeclaration(d, /Detalhes de início de sessão/))) return false;
     if (!rpa.restricted || !rpa.testCredentials) {
@@ -101,16 +111,16 @@ export async function fillDeclarations(
     return true;
   });
 
-  // 4) Classificação de conteúdo (IARC) — questionário específico do app.
-  await step('classificação-iarc', async () => {
-    await gotoContentOverview(d, dev, app);
-    if (!(await openDeclaration(d, /Classificação de conteúdo/))) return false;
-    // IARC varia demais; não arriscamos respostas erradas — preencha 1x na mão.
-    throw new Error('IARC é questionário específico do app — preencha na mão (Livre/3+ p/ recarga).');
-  });
+  // 4) Classificação de conteúdo (IARC)
+  if (rpa.iarc) {
+    await step('classificação-iarc', 'Abra "Classificação de conteúdo" → Iniciar questionário: email (rpa.iarc.email), categoria (rpa.iarc.category), responda TUDO "Não" exceto compras digitais (rpa.iarc.inAppPurchases) e os overrides rpa.iarc.yes; salve o questionário.', async () => {
+      await fillIarc(d, dev, rpa);
+      return true;
+    });
+  }
 
   // 5) Público-alvo — faixas etárias (depende de app-access concluído)
-  await step('público-alvo', async () => {
+  await step('público-alvo', 'Abra "Público-alvo e conteúdo" (exige app-access feito): marque as faixas rpa.targetAges (ex.: 18+), Seguinte, Guardar.', async () => {
     await gotoContentOverview(d, dev, app);
     if (!(await openDeclaration(d, /Público-alvo e conteúdo/))) return false;
     if (await d.page.getByText(/Preencha a secção Detalhes de início de sessão/).count()) {
@@ -129,14 +139,14 @@ export async function fillDeclarations(
 
   // 6) Segurança de dados — wizard
   if (rpa.dataSafety) {
-    await step('segurança-de-dados', async () => {
+    await step('segurança-de-dados', 'Abra "Segurança de dados" (wizard 5 passos): recolhe=Sim, encriptado em trânsito, criação de conta, URL de exclusão; marque os tipos rpa.dataSafety.types; em Utilização, 1 diálogo por tipo (recolhido, não-efémero, obrigatório/opcional, finalidades); pré-visualize e Guardar.', async () => {
       await fillDataSafety(d, dev, app, rpa);
       return true;
     });
   }
 
   // 7) ID de publicidade
-  await step('id-publicidade', async () => {
+  await step('id-publicidade', 'Abra "ID de publicidade": usa AD_ID? (rpa.usesAdvertisingId, geralmente Não); Guardar.', async () => {
     await gotoContentOverview(d, dev, app);
     if (!(await openDeclaration(d, /ID de publicidade/))) return false;
     await pickRadio(d.page, rpa.usesAdvertisingId ? SIM : NAO);
@@ -145,7 +155,7 @@ export async function fillDeclarations(
   });
 
   // 8) Apps governamentais
-  await step('governamentais', async () => {
+  await step('governamentais', 'Abra "Apps governamentais": é governamental? (rpa.isGovernmentApp, geralmente Não); Guardar.', async () => {
     await gotoContentOverview(d, dev, app);
     if (!(await openDeclaration(d, /Apps governamentais/))) return false;
     await pickRadio(d.page, rpa.isGovernmentApp ? SIM : NAO);
@@ -154,7 +164,7 @@ export async function fillDeclarations(
   });
 
   // 9) Funcionalidades financeiras — "nenhuma"
-  await step('financeiras', async () => {
+  await step('financeiras', 'Abra "Funcionalidades financeiras": marque "nenhuma" (rpa.financialFeatures="none"); Guardar.', async () => {
     await gotoContentOverview(d, dev, app);
     if (!(await openDeclaration(d, /Funcionalidades financeiras/))) return false;
     await pickRadio(d.page, NAO).catch(async () => {
@@ -165,7 +175,7 @@ export async function fillDeclarations(
   });
 
   // 10) Saúde — "nenhuma"
-  await step('saúde', async () => {
+  await step('saúde', 'Abra "Saúde": marque "nenhuma" (rpa.healthFeatures="none"); Guardar.', async () => {
     await gotoContentOverview(d, dev, app);
     if (!(await openDeclaration(d, /^Saúde|Aplicações de saúde/))) return false;
     await pickRadio(d.page, NAO).catch(async () => {
@@ -177,7 +187,7 @@ export async function fillDeclarations(
 
   await gotoContentOverview(d, dev, app);
   const pendingAfter = await pendingAttention(d);
-  return { done, skipped, pendingAfter };
+  return { done, skipped, followups, pendingAfter };
 }
 
 async function pendingAttention(d: Driver): Promise<number> {
