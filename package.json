@@ -11,8 +11,9 @@
     "playpub.config.example.json"
   ],
   "scripts": {
-    "build": "tsup src/cli.ts src/mcp.ts --format esm --clean --target node18",
+    "build": "tsup src/cli.ts src/mcp.ts --format esm --clean --target node18 --external playwright --external playwright-core",
     "dev": "tsx src/cli.ts",
+    "check": "tsx scripts/check-rpa.mjs",
     "prepublishOnly": "npm run build"
   },
   "engines": {

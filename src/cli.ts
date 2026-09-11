@@ -102,6 +102,39 @@ program
   .action((o) => emit(setupServiceAccount({ githubRepo: o.repo, projectPrefix: o.prefix, dryRun: o.dryRun })));
 
 program
+  .command('rpa')
+  .description('preenche as declarações só-console via navegador logado (camada 2, Playwright)')
+  .option('-a, --app <name>', 'app do monorepo')
+  .option('--all', 'todos os apps')
+  .option('-p, --phase <phase>', 'declarations|store|submit|all', 'all')
+  .option('--user-data-dir <dir>', 'dir persistente do Chrome (mantém o login)')
+  .option('--headless', 'roda sem janela (só depois de logar 1x com janela)')
+  .option('--dry-run', 'navega e valida, mas NÃO clica em Guardar/Enviar')
+  .action(async (o) => {
+    try {
+      const { config, path } = loadConfig(process.cwd(), cfgPath());
+      const { runRpa } = await import('./rpa/index.js');
+      const apps = selectApps(config, path, { app: o.app, all: o.all });
+      const out: Result[] = [];
+      for (const app of apps) {
+        out.push(
+          await runRpa({
+            developerId: config.developerId ?? '',
+            app,
+            phase: o.phase,
+            userDataDir: o.userDataDir,
+            headless: o.headless,
+            dryRun: o.dryRun,
+          }),
+        );
+      }
+      emit(out);
+    } catch (e) {
+      emit({ ok: false, command: 'rpa', error: (e as Error).message });
+    }
+  });
+
+program
   .command('mcp')
   .description('sobe um servidor MCP (stdio) expondo os comandos como tools pra IA')
   .action(async () => {

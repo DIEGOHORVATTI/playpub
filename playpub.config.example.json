@@ -1,6 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/DIEGOHORVATTI/playpub/main/schema.json",
   "serviceAccountKey": "PLAY_SERVICE_ACCOUNT_JSON",
+  "developerId": "6359376848158940710",
   "defaults": {
     "track": "alpha",
     "status": "draft"
@@ -24,7 +25,42 @@
         }
       },
       "testers": { "countries": ["BR"], "emails": ["testador1@gmail.com"] },
-      "contact": { "email": "contato@exemplo.com", "website": "https://unitv.exemplo.com.br" }
+      "contact": { "email": "contato@exemplo.com", "website": "https://unitv.exemplo.com.br" },
+      "rpa": {
+        "consoleAppId": "4974105515853971968",
+        "privacyPolicyUrl": "https://unitv.exemplo.com.br/privacidade/",
+        "accountDeletionUrl": "https://unitv.exemplo.com.br/excluir-conta/",
+        "hasAds": false,
+        "usesAdvertisingId": false,
+        "isGovernmentApp": false,
+        "financialFeatures": "none",
+        "healthFeatures": "none",
+        "restricted": true,
+        "testCredentials": {
+          "name": "Test account",
+          "email": "review@exemplo.com",
+          "password": "GoogleReview2026",
+          "instructionsEn": "Open the app, on the Login screen enter the email and password above, then tap Login. Auth is email+password (not OTP). Full access to all features."
+        },
+        "targetAges": ["18+"],
+        "category": "Entretenimento",
+        "dataSafety": {
+          "encryptedInTransit": true,
+          "accountCreation": ["Nome de utilizador e palavra-passe"],
+          "deletionUrl": "https://unitv.exemplo.com.br/excluir-conta/",
+          "types": [
+            { "label": "Nome", "purposes": ["Funcionalidade da app", "Gestão da conta"] },
+            { "label": "Endereço de email", "purposes": ["Funcionalidade da app", "Gestão da conta"] },
+            { "label": "IDs de utilizador", "purposes": ["Funcionalidade da app", "Gestão da conta"] },
+            { "label": "Número de telefone", "purposes": ["Funcionalidade da app", "Gestão da conta"] },
+            { "label": "Outras informações", "purposes": ["Funcionalidade da app"] },
+            { "label": "Informações de pagamento do utilizador", "purposes": ["Funcionalidade da app", "Gestão da conta"] },
+            { "label": "Histórico de compras", "purposes": ["Funcionalidade da app", "Gestão da conta"] },
+            { "label": "Fotos", "required": false, "purposes": ["Funcionalidade da app"] },
+            { "label": "Dispositivo ou outros IDs", "purposes": ["Funcionalidade da app"] }
+          ]
+        }
+      }
     },
     "nexatv": {
       "expoAppJson": "apps/nexatv/app.json",

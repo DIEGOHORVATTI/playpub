@@ -11,7 +11,7 @@ A publicação no Play **não é** uma coisa só — ela se divide em 3 camadas,
 | Camada | O quê | Como o playpub resolve |
 |---|---|---|
 | **1. API** | Enviar AAB/APK, faixas, testadores, países, ficha da loja (texto + ícone + feature + screenshots), lançamentos | `playpub publish` — Google Play Developer API (`androidpublisher`). **Funciona de verdade.** |
-| **2. Só-console (RPA)** | Declarações de "Conteúdo da app" (privacidade, anúncios, classificação IARC, segurança de dados, público-alvo…) e criação do 1º app | `src/rpa/` — Playwright dirigindo o navegador logado. Sem API oficial. |
+| **2. Só-console (RPA)** | Declarações de "Conteúdo da app" (privacidade, anúncios, segurança de dados, público-alvo, app access…), categoria/contato e envio pra revisão | `playpub rpa` — Playwright dirigindo o navegador logado. **Funciona** (menos IARC, que é específico do app). |
 | **3. Manual (one-time)** | Criar a **service account** no Google Cloud + **convidá-la** no Play Console | `playpub setup:sa` faz o Cloud e o secret; o convite no Play é o único clique manual (o Google não tem API pra isso). |
 
 ## Instalação
@@ -69,9 +69,29 @@ Um `playpub.config.json` descreve **N apps**. Cada app pode herdar de `defaults`
 
 Seleção de app: `--app <nome>` ou `--all`. Se o repo tem só 1 app, ele é o default.
 
+## Camada 2 — RPA (declarações só-console)
+
+O que não tem API, o `playpub rpa` faz dirigindo o navegador **já logado** no Play Console (Playwright). Preenche as 10 declarações do "Conteúdo da app", categoria + contato, e envia pra revisão — espelhando o fluxo validado à mão.
+
+```bash
+# 1x: instale o playwright (dependência opcional) e logue com janela
+npm i -D playwright
+playpub rpa --app unitv --phase declarations   # abre o Chrome; faça login no Console na 1ª vez
+
+# fases: declarations | store | submit | all (default all)
+playpub rpa --app unitv --phase store    # categoria + detalhes de contato
+playpub rpa --app unitv --phase submit   # "Enviar N alterações para revisão"
+playpub rpa --app unitv --dry-run        # navega e valida, sem clicar Guardar/Enviar
+```
+
+Config: preencha `developerId` (topo) e, por app, `rpa.consoleAppId` + as respostas (veja o bloco `rpa` em [`playpub.config.example.json`](./playpub.config.example.json)). O login é reaproveitado via `--user-data-dir` (default: um dir no tmp).
+
+**Limites conhecidos:** a **Classificação de conteúdo (IARC)** é um questionário específico por app — preencha 1x na mão (some da lista depois). O `--dry-run` é seu amigo pra conferir a navegação antes de deixar salvar.
+
+
 ## Uso por IA (MCP)
 
-O `playpub` sobe um **servidor MCP** que expõe os comandos como tools (`playpub_doctor`, `playpub_publish`, `playpub_links`, `playpub_setup_sa`, `playpub_init`). Toda tool devolve um `Result` em JSON. Registre no seu cliente MCP:
+O `playpub` sobe um **servidor MCP** que expõe os comandos como tools (`playpub_doctor`, `playpub_publish`, `playpub_rpa`, `playpub_links`, `playpub_setup_sa`, `playpub_init`). Toda tool devolve um `Result` em JSON. Registre no seu cliente MCP:
 
 ```jsonc
 // .mcp.json / config do Claude Code
@@ -94,6 +114,7 @@ Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_AL
 | `doctor` | — | checa CLIs obrigatórias + valida a config |
 | `setup:sa` | 3 | cria projeto GCP + SA + chave + secret no GitHub |
 | `publish` | 1 | sobe AAB + ficha da loja pra faixa (API) |
+| `rpa` | 2 | declarações só-console + categoria/contato + enviar pra revisão (Playwright) |
 | `links` | 1 | links de opt-in e de loja |
 | `mcp` | — | sobe o servidor MCP (stdio) |
 
@@ -104,7 +125,8 @@ Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_AL
 
 ## Roadmap
 
-- [ ] `rpa:declarations` completo (Playwright) — camada 2 ponta-a-ponta
+- [x] `rpa` completo (Playwright) — declarações + loja + envio pra revisão
+- [ ] Classificação de conteúdo (IARC) automatizada por perfil de app
 - [ ] Import/Export CSV da Segurança de dados
 - [ ] `create-app` (criação do 1º app via RPA)
 - [ ] `promote` (mover de faixa) e `rollout` (percentual)

@@ -1,89 +1,262 @@
 /**
- * CAMADA 2 (RPA / só-console): as declarações de "Conteúdo da app" e a criação
- * do 1º app NÃO têm API. Aqui vai o mapa do fluxo (aprendido na mão) pra dirigir
- * via Playwright. É um SCAFFOLD: liga o navegador logado e navega os formulários.
+ * CAMADA 2 (RPA / só-console): as declarações de "Conteúdo da app" não têm API.
+ * Este módulo dirige o navegador logado (Playwright) e preenche as 10 declarações
+ * espelhando EXATAMENTE o fluxo validado à mão em 2 apps (UniTV + Nexa).
  *
- * Requer o pacote opcional "playwright" e uma sessão logada no Play Console
- * (use um userDataDir persistente pra reaproveitar o login).
+ * Estratégia robusta: em vez de adivinhar o slug de cada página, abrimos pela
+ * VISÃO GERAL (`app-content/overview`) e clicamos o "Iniciar declaração" que
+ * segue cada título — foi o que funcionou de forma estável. Slugs diretos
+ * confirmados: ad-id-declaration, government-apps, testing-credentials,
+ * target-audience-content, data-privacy-security.
  *
- * Ordem real das declarações (mapeada):
- *   1. Política de privacidade      → URL do site
- *   2. Anúncios                     → contém anúncios? (sim/não)
- *   3. Detalhes de início de sessão → app restrito? credenciais de teste
- *   4. Classificação de conteúdo    → questionário IARC (categoria + perguntas)
- *   5. Público-alvo                 → faixas etárias (ex.: 18+)
- *   6. Segurança de dados           → tipos de dados + uso (form longo, 5 passos)
- *   7. ID de publicidade            → usa? (sim/não)
- *   8. Apps governamentais          → é? (sim/não)
- *   9. Funcionalidades financeiras  → nenhuma / quais
- *  10. Saúde                        → nenhuma / quais
- *
- * Dicas aprendidas (pro RPA ser estável):
- *  - Prefira clique por role/label (get_by_role) a coordenada — o zoom varia.
- *  - Os refs de checkbox mudam a cada re-render: clique 1, valide, repita.
- *  - Upload de imagem da Ficha usa UM input[type=file] compartilhado: o arquivo
- *    cai na BIBLIOTECA de recursos; depois selecione da biblioteca no slot.
- *  - A URL de exclusão de conta é validada (precisa responder 200).
+ * Ordem/dependências reais:
+ *   - Público-alvo depende de "Detalhes de início de sessão" já concluído.
+ *   - Segurança de dados é um wizard de 5 passos; o passo "Utilização" abre um
+ *     DIÁLOGO por tipo de dado (recolhido → não-efémero → necessária → finalidades).
  */
+import type { RpaConfig } from '../core/types.js';
+import {
+  Driver,
+  clickButton,
+  clickSave,
+  checkBox,
+  expandSections,
+  fillText,
+  gotoContentOverview,
+  openDeclaration,
+  pickRadio,
+  pickRadioAfter,
+} from './driver.js';
 
-export interface DeclarationsInput {
-  developerId: string; // ex.: 6359376848158940710
-  appId: string; // ex.: 4974105515853971968
-  privacyPolicyUrl: string;
-  accountDeletionUrl: string;
-  hasAds: boolean;
-  usesAdvertisingId: boolean;
-  restricted: boolean; // app exige login?
-  testCredentials?: { email: string; password: string; instructionsEn: string };
-  targetAges: Array<'5-' | '6-8' | '9-12' | '13-15' | '16-17' | '18+'>;
-  contentRating: { email: string; category: 'game' | 'social' | 'other' };
-  dataSafety?: unknown; // ver esquema no README; recomendável usar Import CSV do Play
+const SIM = /^\s*Sim/;
+const NAO = /^\s*Não/;
+
+export interface DeclarationsResult {
+  done: string[];
+  skipped: string[];
+  pendingAfter: number;
 }
 
-export interface RpaOptions {
-  /** Diretório persistente do Chrome pra manter o login. */
-  userDataDir: string;
-  headless?: boolean;
-}
+/** Preenche todas as declarações do "Conteúdo da app". */
+export async function fillDeclarations(
+  d: Driver,
+  dev: string,
+  rpa: RpaConfig,
+): Promise<DeclarationsResult> {
+  const app = rpa.consoleAppId;
+  const done: string[] = [];
+  const skipped: string[] = [];
 
-const CONTENT_URL = (dev: string, app: string, page: string) =>
-  `https://play.google.com/console/u/0/developers/${dev}/app/${app}/app-content/${page}`;
+  const step = async (label: string, fn: () => Promise<boolean>) => {
+    try {
+      const ok = await fn();
+      (ok ? done : skipped).push(label);
+    } catch (e) {
+      skipped.push(`${label} (${(e as Error).message})`);
+    }
+  };
 
-/**
- * Preenche as declarações via navegador. IMPLEMENTAÇÃO PARCIAL (scaffold):
- * abre o navegador e navega. Complete cada passo conforme o mapa acima.
- */
-export async function fillDeclarations(input: DeclarationsInput, opts: RpaOptions): Promise<void> {
-  // import dinâmico: playwright é dependência opcional
-  let chromium: typeof import('playwright').chromium;
-  try {
-    ({ chromium } = await import('playwright'));
-  } catch {
-    throw new Error('Instale o pacote opcional "playwright" pra usar o módulo RPA: npm i -D playwright');
+  // 1) Política de privacidade — URL
+  if (rpa.privacyPolicyUrl) {
+    await step('privacidade', async () => {
+      await gotoContentOverview(d, dev, app);
+      if (!(await openDeclaration(d, /Política de privacidade/))) return false;
+      await fillText(d.page.getByRole('textbox').first(), rpa.privacyPolicyUrl!);
+      await clickSave(d);
+      return true;
+    });
   }
 
-  const ctx = await chromium.launchPersistentContext(opts.userDataDir, {
-    headless: opts.headless ?? false,
+  // 2) Anúncios — sim/não
+  await step('anúncios', async () => {
+    await gotoContentOverview(d, dev, app);
+    if (!(await openDeclaration(d, /^Anúncios/))) return false;
+    await pickRadio(d.page, rpa.hasAds ? SIM : NAO);
+    await clickSave(d);
+    return true;
   });
-  const page = ctx.pages()[0] ?? (await ctx.newPage());
 
-  const goto = (p: string) => page.goto(CONTENT_URL(input.developerId, input.appId, p));
+  // 3) Detalhes de início de sessão (app access)
+  await step('app-access', async () => {
+    await gotoContentOverview(d, dev, app);
+    if (!(await openDeclaration(d, /Detalhes de início de sessão/))) return false;
+    if (!rpa.restricted || !rpa.testCredentials) {
+      await pickRadio(d.page, NAO); // app não restrito
+      await clickSave(d);
+      return true;
+    }
+    await pickRadio(d.page, SIM);
+    await clickButton(d, /Adicione detalhes|Adicionar detalhes/);
+    const c = rpa.testCredentials;
+    // ordem dos campos: Nome | utilizador/email | palavra-passe | instruções
+    const inputs = d.page.locator('input[type="text"], input:not([type]), input[type="email"]');
+    await fillText(inputs.nth(0), c.name ?? 'Test account');
+    await fillText(inputs.nth(1), c.email);
+    await fillText(inputs.nth(2), c.password);
+    await fillText(d.page.locator('textarea').first(), c.instructionsEn);
+    // checkbox "acesso total a todas as funcionalidades"
+    await d.page.locator('input[type="checkbox"]').last().check().catch(() => {});
+    await clickButton(d, /^Adicionar$/);
+    await clickSave(d);
+    return true;
+  });
 
-  // 1) Política de privacidade
-  await goto('privacy-policy');
-  await page.getByRole('textbox').first().fill(input.privacyPolicyUrl);
-  await page.getByRole('button', { name: /guardar|salvar|save/i }).click();
+  // 4) Classificação de conteúdo (IARC) — questionário específico do app.
+  await step('classificação-iarc', async () => {
+    await gotoContentOverview(d, dev, app);
+    if (!(await openDeclaration(d, /Classificação de conteúdo/))) return false;
+    // IARC varia demais; não arriscamos respostas erradas — preencha 1x na mão.
+    throw new Error('IARC é questionário específico do app — preencha na mão (Livre/3+ p/ recarga).');
+  });
 
-  // 2) Anúncios
-  await goto('ads-declaration');
-  await page
-    .getByRole('radio', { name: input.hasAds ? /sim|contém anúncios/i : /não.*anúncios/i })
-    .click();
-  await page.getByRole('button', { name: /guardar|salvar|save/i }).click();
+  // 5) Público-alvo — faixas etárias (depende de app-access concluído)
+  await step('público-alvo', async () => {
+    await gotoContentOverview(d, dev, app);
+    if (!(await openDeclaration(d, /Público-alvo e conteúdo/))) return false;
+    if (await d.page.getByText(/Preencha a secção Detalhes de início de sessão/).count()) {
+      throw new Error('bloqueado: conclua "Detalhes de início de sessão" antes.');
+    }
+    const ages = rpa.targetAges ?? ['18+'];
+    const map: Record<string, RegExp> = {
+      '5-': /Até 5/, '6-8': /6-8/, '9-12': /9-12/, '13-15': /13-15/,
+      '16-17': /16-17/, '18+': /18 anos e superior|18 anos e mais|18\+/,
+    };
+    for (const a of ages) await checkBox(d.page, map[a]);
+    await clickButton(d, /^(Seguinte|Próximo|Continuar)$/);
+    await clickSave(d); // no resumo
+    return true;
+  });
 
-  // 3..10 — seguir o mapa acima (público-alvo depende do app access;
-  //         segurança de dados é o form mais longo — considere "Import CSV").
-  // TODO: completar. Deixado como scaffold intencional (ver README > RPA).
+  // 6) Segurança de dados — wizard
+  if (rpa.dataSafety) {
+    await step('segurança-de-dados', async () => {
+      await fillDataSafety(d, dev, app, rpa);
+      return true;
+    });
+  }
 
-  await ctx.close();
+  // 7) ID de publicidade
+  await step('id-publicidade', async () => {
+    await gotoContentOverview(d, dev, app);
+    if (!(await openDeclaration(d, /ID de publicidade/))) return false;
+    await pickRadio(d.page, rpa.usesAdvertisingId ? SIM : NAO);
+    await clickSave(d);
+    return true;
+  });
+
+  // 8) Apps governamentais
+  await step('governamentais', async () => {
+    await gotoContentOverview(d, dev, app);
+    if (!(await openDeclaration(d, /Apps governamentais/))) return false;
+    await pickRadio(d.page, rpa.isGovernmentApp ? SIM : NAO);
+    await clickSave(d);
+    return true;
+  });
+
+  // 9) Funcionalidades financeiras — "nenhuma"
+  await step('financeiras', async () => {
+    await gotoContentOverview(d, dev, app);
+    if (!(await openDeclaration(d, /Funcionalidades financeiras/))) return false;
+    await pickRadio(d.page, NAO).catch(async () => {
+      await checkBox(d.page, /Nenhuma destas|Nenhuma/);
+    });
+    await clickSave(d);
+    return true;
+  });
+
+  // 10) Saúde — "nenhuma"
+  await step('saúde', async () => {
+    await gotoContentOverview(d, dev, app);
+    if (!(await openDeclaration(d, /^Saúde|Aplicações de saúde/))) return false;
+    await pickRadio(d.page, NAO).catch(async () => {
+      await checkBox(d.page, /Nenhuma destas|Nenhuma/);
+    });
+    await clickSave(d);
+    return true;
+  });
+
+  await gotoContentOverview(d, dev, app);
+  const pendingAfter = await pendingAttention(d);
+  return { done, skipped, pendingAfter };
+}
+
+async function pendingAttention(d: Driver): Promise<number> {
+  const t = await d.page.getByText(/Requerem atenção/).first().textContent().catch(() => null);
+  const m = t?.match(/\((\d+)\)/);
+  return m ? Number(m[1]) : 0;
+}
+
+/** Wizard de Segurança de dados (5 passos). */
+async function fillDataSafety(d: Driver, dev: string, app: string, rpa: RpaConfig): Promise<void> {
+  const ds = rpa.dataSafety!;
+  await gotoContentOverview(d, dev, app);
+  if (!(await openDeclaration(d, /Segurança d[eo]s dados/))) {
+    throw new Error('não achei a declaração de Segurança de dados na visão geral.');
+  }
+
+  await clickButton(d, /^Seguinte$/); // passo 1 (Vista geral)
+
+  // passo 2: recolhe? Sim → encriptado? → criação de conta → URL exclusão
+  await pickRadio(d.page, SIM);
+  await d.page.waitForTimeout(700);
+  await pickRadioAfter(
+    d.page,
+    /encriptados quando estão em trânsito/,
+    (ds.encryptedInTransit ?? true) ? SIM : NAO,
+  );
+  for (const m of ds.accountCreation ?? ['Nome de utilizador e palavra-passe']) {
+    await checkBox(d.page, new RegExp('^\\s*' + escapeRe(m) + '\\s*$'));
+  }
+  if (ds.deletionUrl) await fillText(d.page.getByRole('textbox').first(), ds.deletionUrl);
+  await pickRadioAfter(d.page, /sem exigir a eliminação/, NAO).catch(() => {});
+  await clickButton(d, /^Seguinte$/);
+
+  // passo 3: tipos de dados — expande e marca
+  await expandSections(d.page);
+  for (const t of ds.types) {
+    await checkBox(d.page, new RegExp('^\\s*' + escapeRe(t.label) + '\\s*$'));
+  }
+  await clickButton(d, /^Seguinte$/);
+
+  // passo 4: 1 diálogo por tipo
+  for (const t of ds.types) await fillDataUsageForType(d, t);
+  await clickButton(d, /^Seguinte$/);
+
+  // passo 5: pré-visualização → Guardar
+  await clickSave(d);
+}
+
+/** Abre o diálogo de um tipo e responde recolhido/efémero/obrigatório/finalidades. */
+async function fillDataUsageForType(
+  d: Driver,
+  t: { label: string; collected?: boolean; shared?: boolean; ephemeral?: boolean; required?: boolean; purposes: string[] },
+): Promise<void> {
+  await expandSections(d.page); // categorias vêm colapsadas
+  const row = d.page.getByText(new RegExp('^\\s*' + escapeRe(t.label) + '\\s*$')).first();
+  const open = row.locator('xpath=following::button[1]');
+  await open.scrollIntoViewIfNeeded();
+  await open.click();
+  await d.page.waitForTimeout(1200);
+
+  if (t.collected ?? true) await checkBox(d.page, /^Recolhidos/);
+  if (t.shared) await checkBox(d.page, /^Partilhado/);
+  await d.page.waitForTimeout(800);
+  await pickRadio(
+    d.page,
+    t.ephemeral ? /processados de forma temporária/ : /não são processados de forma temporária/,
+  );
+  await d.page.waitForTimeout(800);
+  await pickRadio(
+    d.page,
+    (t.required ?? true)
+      ? /A recolha de dados é necessária/
+      : /Os utilizadores podem escolher se estes dados são recolhidos/,
+  );
+  await d.page.waitForTimeout(600);
+  for (const p of t.purposes) await checkBox(d.page, new RegExp('^\\s*' + escapeRe(p)));
+  await clickSave(d); // "Guardar" do diálogo
+}
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

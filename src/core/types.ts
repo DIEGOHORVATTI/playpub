@@ -15,6 +15,59 @@ export interface ListingConfig {
   phoneScreenshots?: string[];
 }
 
+/** Um tipo de dado da declaração de Segurança de dados (camada RPA). */
+export interface DataSafetyType {
+  /** Rótulo visível no Console. Ex.: "Nome", "Endereço de email", "Fotos". */
+  label: string;
+  /** Coletado? Default true. */
+  collected?: boolean;
+  /** Partilhado com terceiros? Default false. */
+  shared?: boolean;
+  /** Processado de forma efémera? Default false. */
+  ephemeral?: boolean;
+  /** Obrigatório? Default true (senão "os utilizadores podem escolher"). */
+  required?: boolean;
+  /** Finalidades. Ex.: ["Funcionalidade da app", "Gestão da conta"]. */
+  purposes: string[];
+}
+
+/** Respostas das declarações "só-console" (camada 2, dirigidas por RPA). */
+export interface RpaConfig {
+  /** ID numérico do app na Play Console (aparece na URL). Obrigatório pro RPA. */
+  consoleAppId: string;
+  privacyPolicyUrl?: string;
+  accountDeletionUrl?: string;
+  /** App contém anúncios? Default false. */
+  hasAds?: boolean;
+  /** Usa ID de publicidade (AD_ID)? Default false. */
+  usesAdvertisingId?: boolean;
+  /** É app governamental? Default false. */
+  isGovernmentApp?: boolean;
+  /** Funcionalidades financeiras — 'none' marca "nenhuma". */
+  financialFeatures?: 'none';
+  /** Funcionalidades de saúde — 'none' marca "nenhuma". */
+  healthFeatures?: 'none';
+  /** App exige login pra ver conteúdo? (Detalhes de início de sessão) */
+  restricted?: boolean;
+  /** Conta de teste pro revisor (quando restricted). */
+  testCredentials?: { name?: string; email: string; password: string; instructionsEn: string };
+  /** Faixas etárias-alvo. Ex.: ["18+"]. */
+  targetAges?: Array<'5-' | '6-8' | '9-12' | '13-15' | '16-17' | '18+'>;
+  /** Categoria da loja. Ex.: "Entretenimento". */
+  category?: string;
+  /** Declaração de Segurança de dados. */
+  dataSafety?: {
+    /** Criptografado em trânsito? Default true. */
+    encryptedInTransit?: boolean;
+    /** Métodos de criação de conta. Ex.: ["Nome de utilizador e palavra-passe"]. */
+    accountCreation?: string[];
+    /** URL de eliminação de conta (validada, precisa responder 200). */
+    deletionUrl?: string;
+    /** Tipos de dados coletados/partilhados. */
+    types: DataSafetyType[];
+  };
+}
+
 export interface AppConfig {
   /** Ex.: "com.unitv.recargafacil". */
   packageName: string;
@@ -30,6 +83,8 @@ export interface AppConfig {
   listing?: Record<string, ListingConfig>;
   testers?: { countries?: string[]; emails?: string[] };
   contact?: { email?: string; website?: string; phone?: string };
+  /** Respostas das declarações só-console (usadas por `playpub rpa`). */
+  rpa?: RpaConfig;
 }
 
 export interface Config {
@@ -38,6 +93,8 @@ export interface Config {
    * ambiente que contém o JSON. Default: env "PLAY_SERVICE_ACCOUNT_JSON".
    */
   serviceAccountKey?: string;
+  /** ID numérico do programador/conta na Play Console (URL). Necessário pro RPA. */
+  developerId?: string;
   /** Valores default herdados por todos os apps. */
   defaults?: Partial<AppConfig>;
   /** Mapa de apps (monorepo). A chave é o nome usado em --app. */

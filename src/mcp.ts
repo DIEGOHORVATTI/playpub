@@ -18,6 +18,7 @@ const TOOLS = [
   { name: 'playpub_publish', description: 'Sobe AAB + ficha da loja pra faixa via API.', inputSchema: { type: 'object', properties: { app: { type: 'string' }, all: { type: 'boolean' }, track: { type: 'string' }, status: { type: 'string' }, config: { type: 'string' } } } },
   { name: 'playpub_links', description: 'Links de opt-in (teste) e de loja de cada app.', inputSchema: { type: 'object', properties: { app: { type: 'string' }, all: { type: 'boolean' }, config: { type: 'string' } } } },
   { name: 'playpub_setup_sa', description: 'Cria projeto GCP + service account + chave e grava o secret no GitHub.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, prefix: { type: 'string' }, dryRun: { type: 'boolean' } } } },
+  { name: 'playpub_rpa', description: 'Preenche as declarações só-console (Conteúdo da app + Definições da loja) e envia pra revisão, via navegador logado (Playwright). Fases: declarations|store|submit|all.', inputSchema: { type: 'object', properties: { app: { type: 'string' }, all: { type: 'boolean' }, phase: { type: 'string' }, userDataDir: { type: 'string' }, headless: { type: 'boolean' }, dryRun: { type: 'boolean' }, config: { type: 'string' } } } },
 ];
 
 async function run(name: string, args: Record<string, any>): Promise<Result | Result[]> {
@@ -51,6 +52,25 @@ async function run(name: string, args: Record<string, any>): Promise<Result | Re
     }
     case 'playpub_setup_sa':
       return setupServiceAccount({ githubRepo: args.repo, projectPrefix: args.prefix, dryRun: args.dryRun });
+    case 'playpub_rpa': {
+      const { config, path } = loadConfig(process.cwd(), args.config);
+      const { runRpa } = await import('./rpa/index.js');
+      const apps = selectApps(config, path, { app: args.app, all: args.all });
+      const out: Result[] = [];
+      for (const app of apps) {
+        out.push(
+          await runRpa({
+            developerId: config.developerId ?? '',
+            app,
+            phase: args.phase,
+            userDataDir: args.userDataDir,
+            headless: args.headless,
+            dryRun: args.dryRun,
+          }),
+        );
+      }
+      return out;
+    }
     default:
       return { ok: false, command: name, error: `tool desconhecida: ${name}` };
   }
