@@ -80,6 +80,12 @@ O `playpub` sobe um **servidor MCP** que expõe os comandos como tools (`playpub
 
 Ou pela CLI, tudo aceita `--json` pra saída estruturada e exit code determinístico (`0` ok, `1` erro).
 
+## CI/CD (GitHub Actions)
+
+Tem um **workflow de referência** pronto em [`templates/github-actions-publish.yml`](./templates/github-actions-publish.yml): faz build do AAB, assina em **cadeia única** (via `android.injected.signing.*` — reassinar depois faz o Play recusar com _"multiple certificate chains"_), e publica com `playpub publish`. Copie pra `.github/workflows/` e ajuste o passo de build ao seu app.
+
+Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` e `PLAY_SERVICE_ACCOUNT_JSON` (esse o `playpub setup:sa` cria e grava).
+
 ## Comandos
 
 | Comando | Camada | O quê |

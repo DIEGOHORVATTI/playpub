@@ -1,0 +1,105 @@
+# Workflow de referência do playpub — build + assina (cadeia única) + publica.
+# Copie pra .github/workflows/ do seu repo e ajuste os passos de build ao seu app.
+# Pensado pra monorepo Expo (apps/<nome>), mas os passos de build são adaptáveis.
+#
+# Secrets necessários (Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_BASE64      → keystore de upload em base64  (base64 -w0 upload.jks)
+#   ANDROID_KEYSTORE_PASSWORD    → senha do store
+#   ANDROID_KEY_ALIAS            → alias da chave
+#   ANDROID_KEY_PASSWORD         → senha da chave
+#   PLAY_SERVICE_ACCOUNT_JSON    → JSON da service account  (crie com: playpub setup:sa)
+
+name: Publica na Google Play (playpub)
+
+on:
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'App do monorepo (chave em playpub.config.json)'
+        type: string
+        default: 'meuapp'
+      track:
+        description: 'Faixa'
+        type: choice
+        default: alpha
+        options: [internal, alpha, beta, production]
+      status:
+        description: 'Status do lançamento'
+        type: choice
+        default: draft
+        options: [draft, completed]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      APP: ${{ github.event.inputs.app }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with: { bun-version: latest }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: android-actions/setup-android@v3
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties', '**/package.json', '**/bun.lock', '**/package-lock.json') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Instala dependências
+        run: bun install
+
+      # --- Build do AAB (ajuste ao seu app) ---
+      - name: Gera projeto nativo Android (Expo)
+        working-directory: apps/${{ env.APP }}
+        run: bunx expo prebuild --platform android --no-install
+
+      - name: Restaura a keystore de upload
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/upload.jks"
+          test -s "$RUNNER_TEMP/upload.jks"
+
+      # Falha rápido se a senha/alias estiverem errados (em vez de descobrir no fim do build).
+      - name: Confere a keystore
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          keytool -list -keystore "$RUNNER_TEMP/upload.jks" -storepass "$KS_PASS" -alias "$KEY_ALIAS" >/dev/null
+          echo "keystore, senha e alias conferem."
+
+      # UMA cadeia de certificado: o gradle assina com a keystore de upload no build.
+      # NÃO reassinar depois (o Play recusa AAB com múltiplas cadeias).
+      - name: Build AAB assinado
+        working-directory: apps/${{ env.APP }}/android
+        env:
+          GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx4g
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease --no-daemon --stacktrace \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/upload.jks" \
+            -Pandroid.injected.signing.store.password="$KS_PASS" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASS"
+
+      - name: Apaga a keystore do runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/upload.jks"
+
+      # --- Publica via playpub (lê playpub.config.json + o secret) ---
+      - name: Publica na Play
+        env:
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: npx --yes playpub publish --app "$APP" --track "${{ github.event.inputs.track }}" --status "${{ github.event.inputs.status }}" --json
