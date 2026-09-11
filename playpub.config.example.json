@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DIEGOHORVATTI/playpub/main/schema.json",
+  "serviceAccountKey": "PLAY_SERVICE_ACCOUNT_JSON",
+  "defaults": {
+    "track": "alpha",
+    "status": "draft"
+  },
+  "apps": {
+    "unitv": {
+      "expoAppJson": "apps/unitv/app.json",
+      "aab": "apps/unitv/android/app/build/outputs/bundle/release/app-release.aab",
+      "listing": {
+        "pt-BR": {
+          "title": "UniTV Recarga Fácil",
+          "shortDescription": "Renove o acesso do seu UniTV em segundos. Compre recarga e pague com PIX.",
+          "fullDescription": "O UniTV Recarga Fácil é o jeito mais rápido de renovar o seu acesso...",
+          "icon": "apps/unitv/play/icon-512.png",
+          "featureGraphic": "apps/unitv/play/feature-1024x500.png",
+          "phoneScreenshots": [
+            "apps/unitv/play/01-menu.png",
+            "apps/unitv/play/02-recarga.png",
+            "apps/unitv/play/03-pedidos.png"
+          ]
+        }
+      },
+      "testers": { "countries": ["BR"], "emails": ["testador1@gmail.com"] },
+      "contact": { "email": "contato@exemplo.com", "website": "https://unitv.exemplo.com.br" }
+    },
+    "nexatv": {
+      "expoAppJson": "apps/nexatv/app.json",
+      "aab": "apps/nexatv/android/app/build/outputs/bundle/release/app-release.aab",
+      "listing": {
+        "pt-BR": {
+          "title": "Nexa Recarga",
+          "shortDescription": "Recarregue e volte a assistir em segundos.",
+          "fullDescription": "..."
+        }
+      },
+      "testers": { "countries": ["BR"], "emails": [] }
+    }
+  }
+}

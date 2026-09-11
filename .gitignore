@@ -1,0 +1,11 @@
+node_modules/
+dist/
+*.log
+
+# NUNCA commitar credenciais / chaves da service account
+*.sa.json
+*service-account*.json
+play-sa*.json
+playpub.config.local.*
+.env
+.env.*
