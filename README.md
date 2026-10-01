@@ -139,6 +139,7 @@ Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_AL
 - [x] `rpa` completo (Playwright) — declarações (incl. IARC) + loja + envio pra revisão
 - [x] Fallback `followups` pra browser MCP no que o RPA não fecha
 - [x] Import/Export CSV da Segurança de dados (`playpub datasafety`)
+- [ ] Clientes OAuth do login com Google via API interna (ver [docs/google-oauth-clients.md](./docs/google-oauth-clients.md))
 - [ ] Declarações via API interna (ver [docs/play-console-internal-api.md](./docs/play-console-internal-api.md))
 - [ ] `create-app` (criação do 1º app via RPA)
 - [ ] `promote` (mover de faixa) e `rollout` (percentual)
