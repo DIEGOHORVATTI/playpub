@@ -13,7 +13,7 @@
   "scripts": {
     "build": "tsup src/cli.ts src/mcp.ts --format esm --clean --target node18 --external playwright --external playwright-core",
     "dev": "tsx src/cli.ts",
-    "check": "tsx scripts/check-rpa.mjs",
+    "check": "tsx scripts/check-rpa.mjs && tsx scripts/check-datasafety.mjs",
     "prepublishOnly": "npm run build"
   },
   "engines": {

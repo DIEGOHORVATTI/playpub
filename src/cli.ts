@@ -5,6 +5,7 @@ import { checkPrereqs } from './core/prereqs.js';
 import { publishApp, appLinks, inspect } from './core/play.js';
 import { setupServiceAccount } from './core/setupSa.js';
 import { init } from './core/init.js';
+import { writeDataSafetyCsv } from './core/dataSafetyCsv.js';
 import type { Result } from './core/types.js';
 
 const program = new Command();
@@ -91,6 +92,22 @@ program
       emit(selectApps(config, path, { app: o.app, all: o.all }).map(appLinks));
     } catch (e) {
       emit({ ok: false, command: 'links', error: (e as Error).message });
+    }
+  });
+
+program
+  .command('datasafety')
+  .description('preenche o CSV exportado da Segurança de dados a partir de rpa.dataSafety (pra Importar CSV)')
+  .requiredOption('-a, --app <name>', 'app do monorepo')
+  .requiredOption('--template <csv>', 'CSV exportado da Console (Segurança de dados → Exportar)')
+  .option('-o, --out <csv>', 'onde gravar o CSV preenchido', 'data-safety.csv')
+  .action((o) => {
+    try {
+      const { config, path } = loadConfig(process.cwd(), cfgPath());
+      const [app] = selectApps(config, path, { app: o.app });
+      emit(writeDataSafetyCsv(app, o.template, o.out));
+    } catch (e) {
+      emit({ ok: false, command: 'datasafety', error: (e as Error).message });
     }
   });
 

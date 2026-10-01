@@ -139,7 +139,7 @@ export async function fillDeclarations(
 
   // 6) Segurança de dados — wizard
   if (rpa.dataSafety) {
-    await step('segurança-de-dados', 'Abra "Segurança de dados" (wizard 5 passos): recolhe=Sim, encriptado em trânsito, criação de conta, URL de exclusão; marque os tipos rpa.dataSafety.types; em Utilização, 1 diálogo por tipo (recolhido, não-efémero, obrigatório/opcional, finalidades); pré-visualize e Guardar.', async () => {
+    await step('segurança-de-dados', 'Prefira `playpub datasafety` + Importar CSV na página. Senão, abra "Segurança de dados" (wizard 5 passos): recolhe=Sim, encriptado em trânsito, criação de conta, URL de exclusão; marque os tipos rpa.dataSafety.types; em Utilização, 1 diálogo por tipo (recolhido, não-efémero, obrigatório/opcional, finalidades); pré-visualize e Guardar.', async () => {
       await fillDataSafety(d, dev, app, rpa);
       return true;
     });

@@ -101,7 +101,7 @@ Via MCP (`playpub_rpa`), esses `followups` vêm no JSON — a IA que orquestra p
 
 ## Uso por IA (MCP)
 
-O `playpub` sobe um **servidor MCP** que expõe os comandos como tools (`playpub_doctor`, `playpub_publish`, `playpub_rpa`, `playpub_links`, `playpub_setup_sa`, `playpub_init`). Toda tool devolve um `Result` em JSON. Registre no seu cliente MCP:
+O `playpub` sobe um **servidor MCP** que expõe os comandos como tools (`playpub_doctor`, `playpub_publish`, `playpub_rpa`, `playpub_datasafety`, `playpub_links`, `playpub_setup_sa`, `playpub_init`). Toda tool devolve um `Result` em JSON. Registre no seu cliente MCP:
 
 ```jsonc
 // .mcp.json / config do Claude Code
@@ -125,6 +125,7 @@ Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_AL
 | `setup:sa` | 3 | cria projeto GCP + SA + chave + secret no GitHub |
 | `publish` | 1 | sobe AAB + ficha da loja pra faixa (API) |
 | `rpa` | 2 | declarações só-console + categoria/contato + enviar pra revisão (Playwright) |
+| `datasafety` | 2 | preenche o CSV exportado da Segurança de dados pra **Importar CSV** |
 | `links` | 1 | links de opt-in e de loja |
 | `mcp` | — | sobe o servidor MCP (stdio) |
 
@@ -137,7 +138,8 @@ Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_AL
 
 - [x] `rpa` completo (Playwright) — declarações (incl. IARC) + loja + envio pra revisão
 - [x] Fallback `followups` pra browser MCP no que o RPA não fecha
-- [ ] Import/Export CSV da Segurança de dados
+- [x] Import/Export CSV da Segurança de dados (`playpub datasafety`)
+- [ ] Declarações via API interna (ver [docs/play-console-internal-api.md](./docs/play-console-internal-api.md))
 - [ ] `create-app` (criação do 1º app via RPA)
 - [ ] `promote` (mover de faixa) e `rollout` (percentual)
 - [ ] schema.json publicado + validação forte da config

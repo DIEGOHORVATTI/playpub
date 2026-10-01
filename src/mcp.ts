@@ -4,6 +4,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { loadConfig, selectApps } from './core/config.js';
 import { checkPrereqs } from './core/prereqs.js';
 import { appLinks, inspect, publishApp } from './core/play.js';
+import { writeDataSafetyCsv } from './core/dataSafetyCsv.js';
 import { setupServiceAccount } from './core/setupSa.js';
 import { init } from './core/init.js';
 import type { Result } from './core/types.js';
@@ -17,6 +18,7 @@ const TOOLS = [
   { name: 'playpub_init', description: 'Cria playpub.config.json (detecta monorepo Expo).', inputSchema: { type: 'object', properties: { force: { type: 'boolean' } } } },
   { name: 'playpub_publish', description: 'Sobe AAB + ficha da loja pra faixa via API.', inputSchema: { type: 'object', properties: { app: { type: 'string' }, all: { type: 'boolean' }, track: { type: 'string' }, status: { type: 'string' }, config: { type: 'string' } } } },
   { name: 'playpub_links', description: 'Links de opt-in (teste) e de loja de cada app.', inputSchema: { type: 'object', properties: { app: { type: 'string' }, all: { type: 'boolean' }, config: { type: 'string' } } } },
+  { name: 'playpub_datasafety', description: 'Preenche o CSV exportado da Segurança de dados (Console → Exportar) a partir de rpa.dataSafety. Depois é só "Importar CSV" na Console — mais estável que o wizard.', inputSchema: { type: 'object', properties: { app: { type: 'string' }, template: { type: 'string' }, out: { type: 'string' }, config: { type: 'string' } }, required: ['app', 'template'] } },
   { name: 'playpub_setup_sa', description: 'Cria projeto GCP + service account + chave e grava o secret no GitHub.', inputSchema: { type: 'object', properties: { repo: { type: 'string' }, prefix: { type: 'string' }, dryRun: { type: 'boolean' } } } },
   { name: 'playpub_rpa', description: 'Preenche as declarações só-console (Conteúdo da app, incl. IARC) + Definições da loja e envia pra revisão, via navegador logado (Playwright). Fases: declarations|store|submit|all. O que o RPA determinístico NÃO fechar volta em `followups` [{step,url,hint,values}] — abra cada `url` no seu browser MCP (ex.: claude-in-chrome) e execute o `hint`. É o fallback "CLI → IA no navegador".', inputSchema: { type: 'object', properties: { app: { type: 'string' }, all: { type: 'boolean' }, phase: { type: 'string' }, userDataDir: { type: 'string' }, headless: { type: 'boolean' }, dryRun: { type: 'boolean' }, config: { type: 'string' } } } },
 ];
@@ -49,6 +51,11 @@ async function run(name: string, args: Record<string, any>): Promise<Result | Re
     case 'playpub_links': {
       const { config, path } = loadConfig(process.cwd(), args.config);
       return selectApps(config, path, { app: args.app, all: args.all }).map(appLinks);
+    }
+    case 'playpub_datasafety': {
+      const { config, path } = loadConfig(process.cwd(), args.config);
+      const [app] = selectApps(config, path, { app: args.app });
+      return writeDataSafetyCsv(app, args.template, args.out ?? 'data-safety.csv');
     }
     case 'playpub_setup_sa':
       return setupServiceAccount({ githubRepo: args.repo, projectPrefix: args.prefix, dryRun: args.dryRun });

@@ -1,4 +1,4 @@
-import { createReadStream, existsSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { playClient } from './auth.js';
 import type { Config, ResolvedApp, Result } from './types.js';
 
@@ -7,6 +7,31 @@ const IMAGE_TYPES = {
   featureGraphic: 'featureGraphic',
   phoneScreenshots: 'phoneScreenshots',
 } as const;
+
+/** Lê largura/altura do cabeçalho IHDR de um PNG (sem dependência). */
+function pngSize(file: string): { w: number; h: number } | null {
+  const buf = readFileSync(file).subarray(0, 24);
+  if (buf.toString('ascii', 1, 4) !== 'PNG') return null;
+  return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
+}
+
+/**
+ * A Play recusa screenshot com lado maior > 2x o menor — mas só no commit do
+ * edit, depois de subir tudo. Falha cedo, antes de gastar o upload do AAB.
+ */
+function invalidScreenshots(app: ResolvedApp): string[] {
+  const bad: string[] = [];
+  for (const l of Object.values(app.listing ?? {})) {
+    for (const f of l.phoneScreenshots ?? []) {
+      if (!existsSync(f)) continue;
+      const s = pngSize(f);
+      if (s && Math.max(s.w, s.h) > 2 * Math.min(s.w, s.h)) bad.push(`${f} (${s.w}x${s.h})`);
+    }
+  }
+  return bad;
+}
+
+const DRAFT_APP_ERROR = /Only releases with status draft may be created on draft app/i;
 
 /**
  * Publica um app via API: cria um "edit", sobe o AAB, aponta pra faixa,
@@ -19,6 +44,11 @@ export async function publishApp(app: ResolvedApp, saRef?: string): Promise<Resu
   const cmd = `publish:${app.name}`;
   if (!app.aab) return { ok: false, command: cmd, error: `App "${app.name}": faltou "aab" na config.` };
   if (!existsSync(app.aab)) return { ok: false, command: cmd, error: `AAB não encontrado: ${app.aab}` };
+
+  const badShots = invalidScreenshots(app);
+  if (badShots.length) {
+    return { ok: false, command: cmd, error: `Screenshot fora da proporção máxima 2:1: ${badShots.join(', ')}` };
+  }
 
   const ap = await playClient(saRef);
   const packageName = app.packageName;
@@ -34,22 +64,34 @@ export async function publishApp(app: ResolvedApp, saRef?: string): Promise<Resu
   });
   const versionCode = bundle.data.versionCode!;
 
-  // 2) aponta pra faixa
-  await ap.edits.tracks.update({
-    packageName,
-    editId,
-    track: app.track!,
-    requestBody: {
+  // 2) aponta pra faixa. App nunca publicado ("rascunho" na Console) só aceita
+  // lançamento draft — em vez de falhar, rebaixa e avisa no manualSteps.
+  const updateTrack = (status: string) =>
+    ap.edits.tracks.update({
+      packageName,
+      editId,
       track: app.track!,
-      releases: [
-        {
-          name: app.releaseName ?? `v${versionCode}`,
-          status: app.status!,
-          versionCodes: [String(versionCode)],
-        },
-      ],
-    },
-  });
+      requestBody: {
+        track: app.track!,
+        releases: [
+          {
+            name: app.releaseName ?? `v${versionCode}`,
+            status,
+            versionCodes: [String(versionCode)],
+          },
+        ],
+      },
+    });
+  let status = app.status!;
+  let draftApp = false;
+  try {
+    await updateTrack(status);
+  } catch (e) {
+    if (status === 'draft' || !DRAFT_APP_ERROR.test((e as Error).message)) throw e;
+    status = 'draft';
+    draftApp = true;
+    await updateTrack(status);
+  }
 
   // 3) ficha da loja (texto + imagens) — opcional
   const listingLangs: string[] = [];
@@ -99,14 +141,18 @@ export async function publishApp(app: ResolvedApp, saRef?: string): Promise<Resu
     data: {
       packageName,
       track: app.track,
-      status: app.status,
+      status,
       versionCode,
       listingLangs,
       optInLink: `https://play.google.com/apps/testing/${packageName}`,
       storeLink: `https://play.google.com/store/apps/details?id=${packageName}`,
     },
-    manualSteps:
-      app.status === 'draft'
+    manualSteps: draftApp
+      ? [
+          'O app ainda é rascunho na Console (nunca foi revisado), então a API só aceita lançamento "draft" — foi rebaixado.',
+          'Conclua as declarações (playpub rpa / datasafety) e envie pra revisão na Console; depois disso "completed" passa a funcionar.',
+        ]
+      : status === 'draft'
         ? ['Lançamento criado como RASCUNHO — confirme/envie pra revisão no Play Console (ou use status "completed").']
         : undefined,
   };
